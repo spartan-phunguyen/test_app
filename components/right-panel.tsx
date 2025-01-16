@@ -1,6 +1,6 @@
 'use client'
 
-import {useState, useCallback, useEffect} from 'react'
+import {useState, useEffect} from 'react'
 import {GoogleMap, InfoWindow, Polyline, useJsApiLoader} from '@react-google-maps/api'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,8 +40,8 @@ interface JSONData {
 export default function RightPanel() {
   const [jsonData, setJsonData] = useState<JSONData | null>(null)
   const [center, setCenter] = useState(defaultCenter)
-  const [lat, setLat] = useState<string>('')
-  const [lng, setLng] = useState<string>('')
+  // const [lat, setLat] = useState<string>('')
+  // const [lng, setLng] = useState<string>('')
   const [trafficData, setTrafficData] = useState<Traffic[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null) // Lưu id được chọn
   const getRandomColor = () => {
@@ -71,9 +71,9 @@ export default function RightPanel() {
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''
   })
 
-  const onMapLoad = useCallback((map: google.maps.Map) => {
-    // You can perform any additional setup here
-  }, [])
+  // const onMapLoad = useCallback((map: google.maps.Map) => {
+  //   // You can perform any additional setup here
+  // }, [])
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]

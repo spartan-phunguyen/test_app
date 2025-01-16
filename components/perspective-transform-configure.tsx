@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Slider } from '@/components/ui/slider'
-import { Label } from '@/components/ui/label'
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Slider } from "@/components/ui/slider"
+import { Label } from "@/components/ui/label"
 import { Upload, Undo, Redo } from 'lucide-react'
+import { NumericInputModal } from './numeric-input-modal'
 
 interface Point {
   x: number
@@ -34,15 +35,24 @@ export default function PerspectiveTransformConfigure() {
   const [isDrawing, setIsDrawing] = useState<boolean>(false)
   const [lines, setLines] = useState<Line[]>([])
   const [currentLine, setCurrentLine] = useState<Line | null>(null)
-  const [lineText, setLineText] = useState<string>('')
+  // const [lineText, setLineText] = useState<string>('')
   const [history, setHistory] = useState<Line[][]>([[]])
   const [historyIndex, setHistoryIndex] = useState<number>(0)
-  const [scaleFactor, setScaleFactor] = useState<number>(1)
+  const [, setScaleFactor] = useState<number>(1)
   const [lineThickness, setLineThickness] = useState<number>(2)
   const [fontSize, setFontSize] = useState<number>(14)
   const [selectedColor, setSelectedColor] = useState<string>(colorOptions[0])
-  const [fx, setFx] = useState<number>(0)
-  const [fy, setFy] = useState<number>(0)
+  const [fx, setFx] = useState<number>(1)
+  const [fy, setFy] = useState<number>(1)
+  const [cx, setCx] = useState<number>(0)
+  const [cy, setCy] = useState<number>(0)
+  const [rightImagePosition, setRightImagePosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isDrawingMode, setIsDrawingMode] = useState<boolean>(false);
+  const [drawingStep, setDrawingStep] = useState<number>(0);
+  const [previewLine, setPreviewLine] = useState<Line | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const leftCanvasRef = useRef<HTMLCanvasElement>(null)
   const rightCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -64,6 +74,7 @@ export default function PerspectiveTransformConfigure() {
           setLines([])
           setHistory([[]])
           setHistoryIndex(0)
+          setRightImagePosition({ x: 0, y: 0 })
         }
         img.src = e.target?.result as string
       }
@@ -72,54 +83,40 @@ export default function PerspectiveTransformConfigure() {
   }
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !rightCanvasRef.current) return
+    if (!isDrawingMode || !rightCanvasRef.current) return;
 
     const rect = rightCanvasRef.current.getBoundingClientRect();
     const scaleX = rightCanvasRef.current.width / rect.width;
     const scaleY = rightCanvasRef.current.height / rect.height;
 
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = (e.clientX - rect.left) * scaleX - rightImagePosition.x;
+    const y = (e.clientY - rect.top) * scaleY - rightImagePosition.y;
 
-    console.log(`Scaled mouse position: ${x}, ${y}`);
-    console.log(`Mouse position: ${x}, ${y}`);
-    console.log(`Canvas size: ${rightCanvasRef.current.width}x${rightCanvasRef.current.height}`);
-    console.log(`Bounding rect:`, rect);
-
-    if (!currentLine) {
-      setCurrentLine({ start: { x, y }, end: { x, y }, text: '', color: selectedColor })
-    } else {
-      const newLine = { ...currentLine, end: { x, y } }
-      setCurrentLine(newLine)
-      setIsDrawing(false)
-      const text = prompt('Enter a number for the line:')
-      if (text !== null) {
-        const numericText = parseFloat(text)
-        if (!isNaN(numericText)) {
-          setLines([...lines, { ...newLine, text: numericText.toString() }])
-          updateHistory([...lines, { ...newLine, text: numericText.toString() }])
-        } else {
-          alert('Please enter a valid number.')
-        }
-      } else {
-        setLines([...lines, newLine])
-        updateHistory([...lines, newLine])
+    if (drawingStep === 0) {
+      setCurrentLine({ start: { x, y }, end: { x, y }, text: '', color: selectedColor });
+      setDrawingStep(1);
+    } else if (drawingStep === 1) {
+      if (currentLine) {
+        const newLine = { ...currentLine, end: { x, y } };
+        setCurrentLine(newLine);
+        setIsModalOpen(true);
       }
-      setCurrentLine(null)
     }
   }
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !currentLine || !rightCanvasRef.current) return
+    if (!isDrawingMode || !rightCanvasRef.current) return;
 
     const rect = rightCanvasRef.current.getBoundingClientRect();
     const scaleX = rightCanvasRef.current.width / rect.width;
     const scaleY = rightCanvasRef.current.height / rect.height;
 
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = (e.clientX - rect.left) * scaleX - rightImagePosition.x;
+    const y = (e.clientY - rect.top) * scaleY - rightImagePosition.y;
 
-    setCurrentLine({ ...currentLine, end: { x, y } })
+    if (drawingStep === 1 && currentLine) {
+      setPreviewLine({ ...currentLine, end: { x, y } });
+    }
   }
 
   const handleSave = () => {
@@ -131,6 +128,8 @@ export default function PerspectiveTransformConfigure() {
       roll,
       fx,
       fy,
+      cx,
+      cy,
       lines
     }
 
@@ -169,28 +168,64 @@ export default function PerspectiveTransformConfigure() {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
-    input.onchange = (e) => handleImageUpload(e as React.ChangeEvent<HTMLInputElement>)
+    input.onchange = (e) => handleImageUpload(e as unknown as React.ChangeEvent<HTMLInputElement>)
     input.click()
   }
 
   const handleReset = () => {
-    setHeight(0)
-    setPitch(0)
-    setYaw(0)
-    setRoll(0)
-    setFx(0)
-    setFy(0)
+    setHeight(0);
+    setPitch(0);
+    setYaw(0);
+    setRoll(0);
+    setFx(1);
+    setFy(1);
+    setCx(0);
+    setCy(0);
+    setIsDrawingMode(false);
+    setIsDrawing(false);
+    setRightImagePosition({ x: 0, y: 0 });
     if (image && rightCanvasRef.current) {
-      const ctx = rightCanvasRef.current.getContext('2d')
+      const ctx = rightCanvasRef.current.getContext('2d');
       if (ctx) {
-        const img = new Image()
-        img.src = image
+        const img = new Image();
+        img.src = image;
         img.onload = () => {
-          ctx.drawImage(img, 0, 0)
-        }
+          ctx.drawImage(img, 0, 0);
+        };
       }
     }
-  }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDrawingMode) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - rightImagePosition.x, y: e.clientY - rightImagePosition.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDragging || isDrawingMode) return;
+    const newX = e.clientX - dragStart.x;
+    const newY = e.clientY - dragStart.y;
+    setRightImagePosition({ x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleModalClose = (value: number | null) => {
+    if (value !== null && currentLine) {
+      const newLine = { ...currentLine, text: value.toString() };
+      setLines([...lines, newLine]);
+      updateHistory([...lines, newLine]);
+    }
+    setCurrentLine(null);
+    setPreviewLine(null);
+    setDrawingStep(0);
+    setIsDrawingMode(false);
+    setIsDrawing(false);
+    setIsModalOpen(false);
+  };
 
   useEffect(() => {
     if (!image) return
@@ -212,7 +247,11 @@ export default function PerspectiveTransformConfigure() {
       rightCanvas.height = img.height
 
       leftCtx.drawImage(img, 0, 0)
-      rightCtx.drawImage(img, 0, 0)
+
+      rightCtx.save();
+      rightCtx.clearRect(0, 0, rightCanvas.width, rightCanvas.height);
+      rightCtx.translate(rightImagePosition.x, rightImagePosition.y);
+      rightCtx.drawImage(img, 0, 0);
 
       const transformedImageData = applyPerspectiveTransform(
         rightCtx.getImageData(0, 0, img.width, img.height),
@@ -221,7 +260,9 @@ export default function PerspectiveTransformConfigure() {
         yaw,
         roll,
         fx,
-        fy
+        fy,
+        cx,
+        cy
       )
       rightCtx.putImageData(transformedImageData, 0, 0)
 
@@ -252,15 +293,28 @@ export default function PerspectiveTransformConfigure() {
       })
 
       if (currentLine) {
-        rightCtx.beginPath()
-        rightCtx.strokeStyle = currentLine.color
-        rightCtx.lineWidth = lineThickness
-        rightCtx.moveTo(currentLine.start.x, currentLine.start.y)
-        rightCtx.lineTo(currentLine.end.x, currentLine.end.y)
-        rightCtx.stroke()
+        rightCtx.beginPath();
+        rightCtx.strokeStyle = currentLine.color;
+        rightCtx.lineWidth = lineThickness;
+        rightCtx.moveTo(currentLine.start.x, currentLine.start.y);
+        rightCtx.lineTo(currentLine.end.x, currentLine.end.y);
+        rightCtx.stroke();
       }
+
+      if (previewLine) {
+        rightCtx.beginPath();
+        rightCtx.strokeStyle = previewLine.color;
+        rightCtx.lineWidth = lineThickness;
+        rightCtx.setLineDash([5, 5]);
+        rightCtx.moveTo(previewLine.start.x, previewLine.start.y);
+        rightCtx.lineTo(previewLine.end.x, previewLine.end.y);
+        rightCtx.stroke();
+        rightCtx.setLineDash([]);
+      }
+
+      rightCtx.restore();
     }
-  }, [image, height, pitch, yaw, roll, fx, fy, lines, currentLine, lineThickness, fontSize])
+  }, [image, height, pitch, yaw, roll, fx, fy, cx, cy, lines, currentLine, previewLine, lineThickness, fontSize, rightImagePosition])
 
   return (
     <div className="p-4 space-y-4 max-h-screen overflow-y-auto">
@@ -294,9 +348,12 @@ export default function PerspectiveTransformConfigure() {
           <h3 className="text-lg font-semibold text-center">Destination</h3>
           <canvas
             ref={rightCanvasRef}
-            className="w-full border rounded-lg cursor-crosshair"
+            className={`w-full border rounded-lg ${isDrawingMode ? 'cursor-crosshair' : 'cursor-move'}`}
             onClick={handleCanvasClick}
-            onMouseMove={handleCanvasMouseMove}
+            onMouseDown={handleMouseDown}
+            onMouseMove={isDrawingMode ? handleCanvasMouseMove : handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
           />
         </div>
       </div>
@@ -318,6 +375,8 @@ export default function PerspectiveTransformConfigure() {
               type="number"
               value={height}
               onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
+              onFocus={(e) => e.target.value = ''}
+              onBlur={(e) => e.target.value = height.toString()}
               className="w-20"
               step="0.1"
             />
@@ -331,7 +390,7 @@ export default function PerspectiveTransformConfigure() {
                 id={`${angle}-slider`}
                 min={-180}
                 max={180}
-                step={1}
+                step={0.01}
                 value={[angle === 'pitch' ? pitch : angle === 'yaw' ? yaw : roll]}
                 onValueChange={(value) => {
                   if (angle === 'pitch') setPitch(value[0])
@@ -349,54 +408,56 @@ export default function PerspectiveTransformConfigure() {
                   else if (angle === 'yaw') setYaw(value)
                   else setRoll(value)
                 }}
+                onFocus={(e) => e.target.value = ''}
+                onBlur={(e) => {
+                  const value = angle === 'pitch' ? pitch : angle === 'yaw' ? yaw : roll
+                  e.target.value = value.toString()
+                }}
                 className="w-20"
-                step="0.1"
+                step="0.01"
               />
             </div>
           </div>
         ))}
-        <div className="space-y-2">
-          <Label htmlFor="fx-slider">Fx</Label>
-          <div className="flex items-center space-x-4">
-            <Slider
-              id="fx-slider"
-              min={-1}
-              max={1}
-              step={0.01}
-              value={[fx]}
-              onValueChange={(value) => setFx(value[0])}
-              className="flex-1"
-            />
-            <Input
-              type="number"
-              value={fx}
-              onChange={(e) => setFx(parseFloat(e.target.value) || 0)}
-              className="w-20"
-              step="0.01"
-            />
+        {['fx', 'fy', 'cx', 'cy'].map((param) => (
+          <div key={param} className="space-y-2">
+            <Label htmlFor={`${param}-slider`} className="capitalize">{param}</Label>
+            <div className="flex items-center space-x-4">
+              <Slider
+                id={`${param}-slider`}
+                min={param === 'cx' || param === 'cy' ? 0 : -5}
+                max={param === 'cx' || param === 'cy' ? 2000 : 5}
+                step={param === 'cx' || param === 'cy' ? 1 : 0.01}
+                value={[param === 'fx' ? fx : param === 'fy' ? fy : param === 'cx' ? cx : cy]}
+                onValueChange={(value) => {
+                  if (param === 'fx') setFx(value[0])
+                  else if (param === 'fy') setFy(value[0])
+                  else if (param === 'cx') setCx(value[0])
+                  else setCy(value[0])
+                }}
+                className="flex-1"
+              />
+              <Input
+                type="number"
+                value={param === 'fx' ? fx : param === 'fy' ? fy : param === 'cx' ? cx : cy}
+                onChange={(e) => {
+                  const value = parseFloat(e.target.value) || 0
+                  if (param === 'fx') setFx(value)
+                  else if (param === 'fy') setFy(value)
+                  else if (param === 'cx') setCx(value)
+                  else setCy(value)
+                }}
+                onFocus={(e) => e.target.value = ''}
+                onBlur={(e) => {
+                  const value = param === 'fx' ? fx : param === 'fy' ? fy : param === 'cx' ? cx : cy
+                  e.target.value = value.toString()
+                }}
+                className="w-20"
+                step={param === 'cx' || param === 'cy' ? "1" : "0.01"}
+              />
+            </div>
           </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="fy-slider">Fy</Label>
-          <div className="flex items-center space-x-4">
-            <Slider
-              id="fy-slider"
-              min={-1}
-              max={1}
-              step={0.01}
-              value={[fy]}
-              onValueChange={(value) => setFy(value[0])}
-              className="flex-1"
-            />
-            <Input
-              type="number"
-              value={fy}
-              onChange={(e) => setFy(parseFloat(e.target.value) || 0)}
-              className="w-20"
-              step="0.01"
-            />
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="flex justify-center space-x-2">
@@ -416,8 +477,17 @@ export default function PerspectiveTransformConfigure() {
         <Button onClick={handleNewImage}>
           New Image
         </Button>
-        <Button onClick={() => setIsDrawing(true)} disabled={!image || isDrawing}>
-          DrawLine
+        <Button
+          onClick={() => {
+            setIsDrawingMode(!isDrawingMode);
+            setIsDrawing(!isDrawing);
+            setDrawingStep(0);
+            setCurrentLine(null);
+            setPreviewLine(null);
+          }}
+          disabled={!image}
+        >
+          {isDrawingMode ? 'Cancel Drawing' : 'Draw Line'}
         </Button>
         <Button onClick={undo} disabled={historyIndex <= 0}>
           <Undo className="w-4 h-4 mr-2" />
@@ -434,7 +504,7 @@ export default function PerspectiveTransformConfigure() {
           Save
         </Button>
       </div>
-
+      <NumericInputModal isOpen={isModalOpen} onClose={handleModalClose} />
     </div>
   )
 }
@@ -446,41 +516,38 @@ function applyPerspectiveTransform(
   yaw: number,
   roll: number,
   fx: number,
-  fy: number
+  fy: number,
+  cx: number,
+  cy: number
 ): ImageData {
   const width = imageData.width;
   const heightImg = imageData.height;
   const inputData = imageData.data;
 
-  // Convert degrees to radians
   const toRadians = (angle: number) => (angle * Math.PI) / 180;
 
   const pitchRad = toRadians(pitch);
   const yawRad = toRadians(yaw);
   const rollRad = toRadians(roll);
 
-  // Rotation matrix around X (pitch)
   const Rx = [
     [1, 0, 0],
     [0, Math.cos(pitchRad), -Math.sin(pitchRad)],
     [0, Math.sin(pitchRad), Math.cos(pitchRad)],
   ];
 
-  // Rotation matrix around Y (yaw)
   const Ry = [
     [Math.cos(yawRad), 0, Math.sin(yawRad)],
     [0, 1, 0],
     [-Math.sin(yawRad), 0, Math.cos(yawRad)],
   ];
 
-  // Rotation matrix around Z (roll)
   const Rz = [
     [Math.cos(rollRad), -Math.sin(rollRad), 0],
     [Math.sin(rollRad), Math.cos(rollRad), 0],
     [0, 0, 1],
   ];
 
-  // Combine rotation matrices: R = Rz * Ry * Rx
   const multiplyMatrices = (a: number[][], b: number[][]): number[][] =>
     a.map((row, i) =>
       b[0].map((_, j) => row.reduce((sum, _, k) => sum + a[i][k] * b[k][j], 0))
@@ -488,54 +555,45 @@ function applyPerspectiveTransform(
 
   const R = multiplyMatrices(multiplyMatrices(Rz, Ry), Rx);
 
-  // Perspective matrix (including Height, Fx, and Fy)
   const P = [
     [...R[0], fx],
     [...R[1], fy],
     [...R[2], height],
   ];
 
-  // Apply perspective matrix to a point
   const applyMatrix = (x: number, y: number): [number, number] => {
-    const z = 1; // Default z value
+    const z = 1;
     const transformed = [
-      P[0][0] * x + P[0][1] * y + P[0][2] * z + P[0][3],
-      P[1][0] * x + P[1][1] * y + P[1][2] * z + P[1][3],
+      P[0][0] * x + P[0][1] * y + P[0][2] * z + P[0][3] + cx,
+      P[1][0] * x + P[1][1] * y + P[1][2] * z + P[1][3] + cy,
       P[2][0] * x + P[2][1] * y + P[2][2] * z + P[2][3],
     ];
     const w = transformed[2];
     return [transformed[0] / w, transformed[1] / w];
   };
 
-  // Create a new array for the transformed image data
   const outputData = new Uint8ClampedArray(inputData.length);
 
-  // Iterate through each pixel in the image
   for (let y = 0; y < heightImg; y++) {
     for (let x = 0; x < width; x++) {
-      // Calculate new coordinates after applying perspective
       const [newX, newY] = applyMatrix(x, y);
 
-      // Get the index of the source pixel
       const srcIdx = (y * width + x) * 4;
 
-      // Round new coordinates and check if they're within the image boundaries
       const newXInt = Math.round(newX);
       const newYInt = Math.round(newY);
 
       if (newXInt >= 0 && newXInt < width && newYInt >= 0 && newYInt < heightImg) {
         const dstIdx = (newYInt * width + newXInt) * 4;
 
-        // Copy pixel values from source to destination
-        outputData[dstIdx] = inputData[srcIdx]; // R
-        outputData[dstIdx + 1] = inputData[srcIdx + 1]; // G
-        outputData[dstIdx + 2] = inputData[srcIdx + 2]; // B
-        outputData[dstIdx + 3] = inputData[srcIdx + 3]; // A
+        outputData[dstIdx] = inputData[srcIdx];
+        outputData[dstIdx + 1] = inputData[srcIdx + 1];
+        outputData[dstIdx + 2] = inputData[srcIdx + 2];
+        outputData[dstIdx + 3] = inputData[srcIdx + 3];
       }
     }
   }
 
-  // Return the new ImageData
   return new ImageData(outputData, width, heightImg);
 }
 
