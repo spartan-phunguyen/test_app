@@ -1,12 +1,11 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Slider } from "@/components/ui/slider"
-import { Label } from "@/components/ui/label"
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Slider } from '@/components/ui/slider'
+import { Label } from '@/components/ui/label'
 import { Upload, Undo, Redo } from 'lucide-react'
-import { NumericInputModal } from './numeric-input-modal'
 
 interface Point {
   x: number
@@ -35,10 +34,10 @@ export default function PerspectiveTransformConfigure() {
   const [isDrawing, setIsDrawing] = useState<boolean>(false)
   const [lines, setLines] = useState<Line[]>([])
   const [currentLine, setCurrentLine] = useState<Line | null>(null)
-  // const [lineText, setLineText] = useState<string>('')
+  const [lineText, setLineText] = useState<string>('')
   const [history, setHistory] = useState<Line[][]>([[]])
   const [historyIndex, setHistoryIndex] = useState<number>(0)
-  const [, setScaleFactor] = useState<number>(1)
+  const [scaleFactor, setScaleFactor] = useState<number>(1)
   const [lineThickness, setLineThickness] = useState<number>(2)
   const [fontSize, setFontSize] = useState<number>(14)
   const [selectedColor, setSelectedColor] = useState<string>(colorOptions[0])
@@ -46,13 +45,6 @@ export default function PerspectiveTransformConfigure() {
   const [fy, setFy] = useState<number>(1)
   const [cx, setCx] = useState<number>(0)
   const [cy, setCy] = useState<number>(0)
-  const [rightImagePosition, setRightImagePosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [isDrawingMode, setIsDrawingMode] = useState<boolean>(false);
-  const [drawingStep, setDrawingStep] = useState<number>(0);
-  const [previewLine, setPreviewLine] = useState<Line | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const leftCanvasRef = useRef<HTMLCanvasElement>(null)
   const rightCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -74,7 +66,6 @@ export default function PerspectiveTransformConfigure() {
           setLines([])
           setHistory([[]])
           setHistoryIndex(0)
-          setRightImagePosition({ x: 0, y: 0 })
         }
         img.src = e.target?.result as string
       }
@@ -83,40 +74,54 @@ export default function PerspectiveTransformConfigure() {
   }
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawingMode || !rightCanvasRef.current) return;
+    if (!isDrawing || !rightCanvasRef.current) return
 
     const rect = rightCanvasRef.current.getBoundingClientRect();
     const scaleX = rightCanvasRef.current.width / rect.width;
     const scaleY = rightCanvasRef.current.height / rect.height;
 
-    const x = (e.clientX - rect.left) * scaleX - rightImagePosition.x;
-    const y = (e.clientY - rect.top) * scaleY - rightImagePosition.y;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
-    if (drawingStep === 0) {
-      setCurrentLine({ start: { x, y }, end: { x, y }, text: '', color: selectedColor });
-      setDrawingStep(1);
-    } else if (drawingStep === 1) {
-      if (currentLine) {
-        const newLine = { ...currentLine, end: { x, y } };
-        setCurrentLine(newLine);
-        setIsModalOpen(true);
+    console.log(`Scaled mouse position: ${x}, ${y}`);
+    console.log(`Mouse position: ${x}, ${y}`);
+    console.log(`Canvas size: ${rightCanvasRef.current.width}x${rightCanvasRef.current.height}`);
+    console.log(`Bounding rect:`, rect);
+
+    if (!currentLine) {
+      setCurrentLine({ start: { x, y }, end: { x, y }, text: '', color: selectedColor })
+    } else {
+      const newLine = { ...currentLine, end: { x, y } }
+      setCurrentLine(newLine)
+      setIsDrawing(false)
+      const text = prompt('Enter a number for the line:')
+      if (text !== null) {
+        const numericText = parseFloat(text)
+        if (!isNaN(numericText)) {
+          setLines([...lines, { ...newLine, text: numericText.toString() }])
+          updateHistory([...lines, { ...newLine, text: numericText.toString() }])
+        } else {
+          alert('Please enter a valid number.')
+        }
+      } else {
+        setLines([...lines, newLine])
+        updateHistory([...lines, newLine])
       }
+      setCurrentLine(null)
     }
   }
 
   const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawingMode || !rightCanvasRef.current) return;
+    if (!isDrawing || !currentLine || !rightCanvasRef.current) return
 
     const rect = rightCanvasRef.current.getBoundingClientRect();
     const scaleX = rightCanvasRef.current.width / rect.width;
     const scaleY = rightCanvasRef.current.height / rect.height;
 
-    const x = (e.clientX - rect.left) * scaleX - rightImagePosition.x;
-    const y = (e.clientY - rect.top) * scaleY - rightImagePosition.y;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
 
-    if (drawingStep === 1 && currentLine) {
-      setPreviewLine({ ...currentLine, end: { x, y } });
-    }
+    setCurrentLine({ ...currentLine, end: { x, y } })
   }
 
   const handleSave = () => {
@@ -128,8 +133,6 @@ export default function PerspectiveTransformConfigure() {
       roll,
       fx,
       fy,
-      cx,
-      cy,
       lines
     }
 
@@ -168,64 +171,28 @@ export default function PerspectiveTransformConfigure() {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/*'
-    input.onchange = (e) => handleImageUpload(e as unknown as React.ChangeEvent<HTMLInputElement>)
+    input.onchange = (e) => handleImageUpload(e as React.ChangeEvent<HTMLInputElement>)
     input.click()
   }
 
   const handleReset = () => {
-    setHeight(0);
-    setPitch(0);
-    setYaw(0);
-    setRoll(0);
-    setFx(1);
-    setFy(1);
-    setCx(0);
-    setCy(0);
-    setIsDrawingMode(false);
-    setIsDrawing(false);
-    setRightImagePosition({ x: 0, y: 0 });
+    setHeight(0)
+    setPitch(0)
+    setYaw(0)
+    setRoll(0)
+    setFx(1)
+    setFy(1)
     if (image && rightCanvasRef.current) {
-      const ctx = rightCanvasRef.current.getContext('2d');
+      const ctx = rightCanvasRef.current.getContext('2d')
       if (ctx) {
-        const img = new Image();
-        img.src = image;
+        const img = new Image()
+        img.src = image
         img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-        };
+          ctx.drawImage(img, 0, 0)
+        }
       }
     }
-  };
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDrawingMode) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - rightImagePosition.x, y: e.clientY - rightImagePosition.y });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || isDrawingMode) return;
-    const newX = e.clientX - dragStart.x;
-    const newY = e.clientY - dragStart.y;
-    setRightImagePosition({ x: newX, y: newY });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleModalClose = (value: number | null) => {
-    if (value !== null && currentLine) {
-      const newLine = { ...currentLine, text: value.toString() };
-      setLines([...lines, newLine]);
-      updateHistory([...lines, newLine]);
-    }
-    setCurrentLine(null);
-    setPreviewLine(null);
-    setDrawingStep(0);
-    setIsDrawingMode(false);
-    setIsDrawing(false);
-    setIsModalOpen(false);
-  };
+  }
 
   useEffect(() => {
     if (!image) return
@@ -247,11 +214,7 @@ export default function PerspectiveTransformConfigure() {
       rightCanvas.height = img.height
 
       leftCtx.drawImage(img, 0, 0)
-
-      rightCtx.save();
-      rightCtx.clearRect(0, 0, rightCanvas.width, rightCanvas.height);
-      rightCtx.translate(rightImagePosition.x, rightImagePosition.y);
-      rightCtx.drawImage(img, 0, 0);
+      rightCtx.drawImage(img, 0, 0)
 
       const transformedImageData = applyPerspectiveTransform(
         rightCtx.getImageData(0, 0, img.width, img.height),
@@ -293,28 +256,15 @@ export default function PerspectiveTransformConfigure() {
       })
 
       if (currentLine) {
-        rightCtx.beginPath();
-        rightCtx.strokeStyle = currentLine.color;
-        rightCtx.lineWidth = lineThickness;
-        rightCtx.moveTo(currentLine.start.x, currentLine.start.y);
-        rightCtx.lineTo(currentLine.end.x, currentLine.end.y);
-        rightCtx.stroke();
+        rightCtx.beginPath()
+        rightCtx.strokeStyle = currentLine.color
+        rightCtx.lineWidth = lineThickness
+        rightCtx.moveTo(currentLine.start.x, currentLine.start.y)
+        rightCtx.lineTo(currentLine.end.x, currentLine.end.y)
+        rightCtx.stroke()
       }
-
-      if (previewLine) {
-        rightCtx.beginPath();
-        rightCtx.strokeStyle = previewLine.color;
-        rightCtx.lineWidth = lineThickness;
-        rightCtx.setLineDash([5, 5]);
-        rightCtx.moveTo(previewLine.start.x, previewLine.start.y);
-        rightCtx.lineTo(previewLine.end.x, previewLine.end.y);
-        rightCtx.stroke();
-        rightCtx.setLineDash([]);
-      }
-
-      rightCtx.restore();
     }
-  }, [image, height, pitch, yaw, roll, fx, fy, cx, cy, lines, currentLine, previewLine, lineThickness, fontSize, rightImagePosition])
+  }, [image, height, pitch, yaw, roll, fx, fy, cx, cy, lines, currentLine, lineThickness, fontSize])
 
   return (
     <div className="p-4 space-y-4 max-h-screen overflow-y-auto">
@@ -348,12 +298,9 @@ export default function PerspectiveTransformConfigure() {
           <h3 className="text-lg font-semibold text-center">Destination</h3>
           <canvas
             ref={rightCanvasRef}
-            className={`w-full border rounded-lg ${isDrawingMode ? 'cursor-crosshair' : 'cursor-move'}`}
+            className="w-full border rounded-lg cursor-crosshair"
             onClick={handleCanvasClick}
-            onMouseDown={handleMouseDown}
-            onMouseMove={isDrawingMode ? handleCanvasMouseMove : handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
+            onMouseMove={handleCanvasMouseMove}
           />
         </div>
       </div>
@@ -375,8 +322,6 @@ export default function PerspectiveTransformConfigure() {
               type="number"
               value={height}
               onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
-              onFocus={(e) => e.target.value = ''}
-              onBlur={(e) => e.target.value = height.toString()}
               className="w-20"
               step="0.1"
             />
@@ -390,7 +335,7 @@ export default function PerspectiveTransformConfigure() {
                 id={`${angle}-slider`}
                 min={-180}
                 max={180}
-                step={0.01}
+                step={1}
                 value={[angle === 'pitch' ? pitch : angle === 'yaw' ? yaw : roll]}
                 onValueChange={(value) => {
                   if (angle === 'pitch') setPitch(value[0])
@@ -408,56 +353,96 @@ export default function PerspectiveTransformConfigure() {
                   else if (angle === 'yaw') setYaw(value)
                   else setRoll(value)
                 }}
-                onFocus={(e) => e.target.value = ''}
-                onBlur={(e) => {
-                  const value = angle === 'pitch' ? pitch : angle === 'yaw' ? yaw : roll
-                  e.target.value = value.toString()
-                }}
                 className="w-20"
-                step="0.01"
+                step="1"
               />
             </div>
           </div>
         ))}
-        {['fx', 'fy', 'cx', 'cy'].map((param) => (
-          <div key={param} className="space-y-2">
-            <Label htmlFor={`${param}-slider`} className="capitalize">{param}</Label>
-            <div className="flex items-center space-x-4">
-              <Slider
-                id={`${param}-slider`}
-                min={param === 'cx' || param === 'cy' ? 0 : -5}
-                max={param === 'cx' || param === 'cy' ? 2000 : 5}
-                step={param === 'cx' || param === 'cy' ? 1 : 0.01}
-                value={[param === 'fx' ? fx : param === 'fy' ? fy : param === 'cx' ? cx : cy]}
-                onValueChange={(value) => {
-                  if (param === 'fx') setFx(value[0])
-                  else if (param === 'fy') setFy(value[0])
-                  else if (param === 'cx') setCx(value[0])
-                  else setCy(value[0])
-                }}
-                className="flex-1"
-              />
-              <Input
-                type="number"
-                value={param === 'fx' ? fx : param === 'fy' ? fy : param === 'cx' ? cx : cy}
-                onChange={(e) => {
-                  const value = parseFloat(e.target.value) || 0
-                  if (param === 'fx') setFx(value)
-                  else if (param === 'fy') setFy(value)
-                  else if (param === 'cx') setCx(value)
-                  else setCy(value)
-                }}
-                onFocus={(e) => e.target.value = ''}
-                onBlur={(e) => {
-                  const value = param === 'fx' ? fx : param === 'fy' ? fy : param === 'cx' ? cx : cy
-                  e.target.value = value.toString()
-                }}
-                className="w-20"
-                step={param === 'cx' || param === 'cy' ? "1" : "0.01"}
-              />
-            </div>
+        <div className="space-y-2">
+          <Label htmlFor="fx-slider">Fx</Label>
+          <div className="flex items-center space-x-4">
+            <Slider
+              id="fx-slider"
+              min={-3}
+              max={3}
+              step={0.01}
+              value={[fx]}
+              onValueChange={(value) => setFx(value[0])}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              value={fx}
+              onChange={(e) => setFx(parseFloat(e.target.value) || 0)}
+              className="w-20"
+              step="0.01"
+            />
           </div>
-        ))}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="fy-slider">Fy</Label>
+          <div className="flex items-center space-x-4">
+            <Slider
+              id="fy-slider"
+              min={-3}
+              max={3}
+              step={0.01}
+              value={[fy]}
+              onValueChange={(value) => setFy(value[0])}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              value={fy}
+              onChange={(e) => setFy(parseFloat(e.target.value) || 0)}
+              className="w-20"
+              step="0.01"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="cx-slider">Cx (Translation X)</Label>
+          <div className="flex items-center space-x-4">
+            <Slider
+              id="cx-slider"
+              min={0}
+              max={2000}
+              step={1}
+              value={[cx]}
+              onValueChange={(value) => setCx(value[0])}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              value={cx}
+              onChange={(e) => setCx(parseFloat(e.target.value) || 0)}
+              className="w-20"
+              step="1"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="cy-slider">Cy (Translation Y)</Label>
+          <div className="flex items-center space-x-4">
+            <Slider
+              id="cy-slider"
+              min={0}
+              max={2000}
+              step={1}
+              value={[cy]}
+              onValueChange={(value) => setCy(value[0])}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              value={cy}
+              onChange={(e) => setCy(parseFloat(e.target.value) || 0)}
+              className="w-20"
+              step="1"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-center space-x-2">
@@ -477,17 +462,8 @@ export default function PerspectiveTransformConfigure() {
         <Button onClick={handleNewImage}>
           New Image
         </Button>
-        <Button
-          onClick={() => {
-            setIsDrawingMode(!isDrawingMode);
-            setIsDrawing(!isDrawing);
-            setDrawingStep(0);
-            setCurrentLine(null);
-            setPreviewLine(null);
-          }}
-          disabled={!image}
-        >
-          {isDrawingMode ? 'Cancel Drawing' : 'Draw Line'}
+        <Button onClick={() => setIsDrawing(true)} disabled={!image || isDrawing}>
+          DrawLine
         </Button>
         <Button onClick={undo} disabled={historyIndex <= 0}>
           <Undo className="w-4 h-4 mr-2" />
@@ -504,9 +480,132 @@ export default function PerspectiveTransformConfigure() {
           Save
         </Button>
       </div>
-      <NumericInputModal isOpen={isModalOpen} onClose={handleModalClose} />
+
     </div>
   )
+}
+
+const invertMatrix = (matrix: number[][]): number[][] => {
+  const det =
+    matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) -
+    matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0]) +
+    matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]);
+
+  if (Math.abs(det) < 1e-10) throw new Error("Matrix is not invertible");
+
+  const inv = [
+    [
+      (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1]) / det,
+      (matrix[0][2] * matrix[2][1] - matrix[0][1] * matrix[2][2]) / det,
+      (matrix[0][1] * matrix[1][2] - matrix[0][2] * matrix[1][1]) / det,
+    ],
+    [
+      (matrix[1][2] * matrix[2][0] - matrix[1][0] * matrix[2][2]) / det,
+      (matrix[0][0] * matrix[2][2] - matrix[0][2] * matrix[2][0]) / det,
+      (matrix[0][2] * matrix[1][0] - matrix[0][0] * matrix[1][2]) / det,
+    ],
+    [
+      (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0]) / det,
+      (matrix[0][1] * matrix[2][0] - matrix[0][0] * matrix[2][1]) / det,
+      (matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0]) / det,
+    ],
+  ];
+  return inv;
+};
+
+
+const multiplyMatrices = (a: number[][], b: number[][]): number[][] =>
+  a.map((row, i) =>
+    b[0].map((_, j) => row.reduce((sum, _, k) => sum + a[i][k] * b[k][j], 0))
+  );
+
+function getTransformedBounds(
+  width: number,
+  height: number,
+  H: number[][]
+): { newWidth: number; newHeight: number; adjustedH: number[][] } {
+  // Tạo các góc của ảnh
+  const corners = [
+    [0, 0, 1],
+    [width, 0, 1],
+    [0, height, 1],
+    [width, height, 1]
+  ];
+
+  // Transform các góc
+  const transformedCorners = corners.map(point => {
+    const transformed = H.map(row =>
+      point.reduce((sum, val, i) => sum + row[i] * val, 0)
+    );
+    // Normalize
+    return [
+      transformed[0] / transformed[2],
+      transformed[1] / transformed[2]
+    ];
+  });
+
+  // Tìm bounds
+  const xCoords = transformedCorners.map(p => p[0]);
+  const yCoords = transformedCorners.map(p => p[1]);
+  const xMin = Math.min(...xCoords);
+  const xMax = Math.max(...xCoords);
+  const yMin = Math.min(...yCoords);
+  const yMax = Math.max(...yCoords);
+
+  // Tính kích thước mới
+  const newWidth = Math.ceil(xMax - xMin);
+  const newHeight = Math.ceil(yMax - yMin);
+
+  // Ma trận dịch chuyển
+  const translationMatrix = [
+    [1, 0, -xMin],
+    [0, 1, -yMin],
+    [0, 0, 1]
+  ];
+
+  // Tính adjusted H
+  const adjustedH = multiplyMatrices(translationMatrix, H);
+
+  return { newWidth, newHeight, adjustedH };
+}
+
+function cropOrResize(
+  imageData: ImageData,
+  maxWidth: number,
+  maxHeight: number
+): ImageData {
+  const width = imageData.width;
+  const height = imageData.height;
+  const scale = Math.min(maxWidth / width, maxHeight / height);
+
+  if (scale < 1) {
+    // Resize image
+    const newWidth = Math.floor(width * scale);
+    const newHeight = Math.floor(height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) throw new Error('Could not get canvas context');
+    
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    if (!tempCtx) throw new Error('Could not get temp canvas context');
+    
+    // Put original image data
+    tempCtx.putImageData(imageData, 0, 0);
+    
+    // Draw scaled version
+    ctx.drawImage(tempCanvas, 0, 0, width, height, 0, 0, newWidth, newHeight);
+    
+    return ctx.getImageData(0, 0, newWidth, newHeight);
+  }
+
+  return imageData;
 }
 
 function applyPerspectiveTransform(
@@ -524,68 +623,93 @@ function applyPerspectiveTransform(
   const heightImg = imageData.height;
   const inputData = imageData.data;
 
-  const toRadians = (angle: number) => (angle * Math.PI) / 180;
+  // Tính điểm chính (principal point)
+  // const cx = width / 2;
+  // const cy = heightImg / 2;
 
+  // 1. Ma trận nội tại K (Intrinsic Matrix)
+  const K = [
+    [fx, 0, cx],
+    [0, fy, cy],
+    [0, 0, 1]
+  ];
+
+  // Convert degrees to radians
+  const toRadians = (angle: number) => (angle * Math.PI) / 180;
   const pitchRad = toRadians(pitch);
   const yawRad = toRadians(yaw);
   const rollRad = toRadians(roll);
 
+  // 2. Các ma trận xoay
   const Rx = [
     [1, 0, 0],
     [0, Math.cos(pitchRad), -Math.sin(pitchRad)],
-    [0, Math.sin(pitchRad), Math.cos(pitchRad)],
+    [0, Math.sin(pitchRad), Math.cos(pitchRad)]
   ];
 
   const Ry = [
     [Math.cos(yawRad), 0, Math.sin(yawRad)],
     [0, 1, 0],
-    [-Math.sin(yawRad), 0, Math.cos(yawRad)],
+    [-Math.sin(yawRad), 0, Math.cos(yawRad)]
   ];
 
   const Rz = [
     [Math.cos(rollRad), -Math.sin(rollRad), 0],
     [Math.sin(rollRad), Math.cos(rollRad), 0],
-    [0, 0, 1],
+    [0, 0, 1]
   ];
 
-  const multiplyMatrices = (a: number[][], b: number[][]): number[][] =>
-    a.map((row, i) =>
-      b[0].map((_, j) => row.reduce((sum, _, k) => sum + a[i][k] * b[k][j], 0))
-    );
+  // Thay đổi thứ tự nhân ma trận: R = Ry * Rx * Rz
+
+  // const R = multiplyMatrices(multiplyMatrices(Rz, Ry), Rx);
 
   const R = multiplyMatrices(multiplyMatrices(Rz, Ry), Rx);
 
-  const P = [
-    [...R[0], fx],
-    [...R[1], fy],
-    [...R[2], height],
-  ];
+  // 3. Tính H = K * R * K^(-1)
+  const K_inv = invertMatrix(K);
+  const KR = multiplyMatrices(K, R);
+  const H = multiplyMatrices(KR, K_inv);
 
-  const applyMatrix = (x: number, y: number): [number, number] => {
-    const z = 1;
-    const transformed = [
-      P[0][0] * x + P[0][1] * y + P[0][2] * z + P[0][3] + cx,
-      P[1][0] * x + P[1][1] * y + P[1][2] * z + P[1][3] + cy,
-      P[2][0] * x + P[2][1] * y + P[2][2] * z + P[2][3],
-    ];
-    const w = transformed[2];
-    return [transformed[0] / w, transformed[1] / w];
-  };
+    // const R = multiplyMatrices(Ry,Rx);
 
-  const outputData = new Uint8ClampedArray(inputData.length);
+  // Scale height theo kích thước ảnh
+  // const scale = Math.max(width, heightImg) / 100;
+  
+  // 3. Vector dịch chuyển T với height được scale
+  // const T = [0, -height, 0];
+  // const T = [0, 0, height];
 
-  for (let y = 0; y < heightImg; y++) {
-    for (let x = 0; x < width; x++) {
-      const [newX, newY] = applyMatrix(x, y);
+  // 4. Tạo ma trận ngoại tại [R|T]
 
-      const srcIdx = (y * width + x) * 4;
+  // const K_inv = invertMatrix(K);
 
-      const newXInt = Math.round(newX);
-      const newYInt = Math.round(newY);
+  // 5. Tính ma trận Perspective Transform P = K * [R|T]
+  // const P = multiplyMatrices(K, RT);
+  // const KR = multiplyMatrices(K, R);
+  // const P = multiplyMatrices(KR, K_inv);
 
-      if (newXInt >= 0 && newXInt < width && newYInt >= 0 && newYInt < heightImg) {
-        const dstIdx = (newYInt * width + newXInt) * 4;
 
+  // 4. Get transformed bounds
+  const { newWidth, newHeight, adjustedH } = getTransformedBounds(width, heightImg, H);
+
+  // 5. Tạo output buffer với kích thước mới
+  const outputData = new Uint8ClampedArray(newWidth * newHeight * 4);
+
+  // 6. Warp perspective với adjusted H
+  for (let y = 0; y < newHeight; y++) {
+    for (let x = 0; x < newWidth; x++) {
+      // Tính điểm nguồn bằng ma trận nghịch đảo của adjusted H
+      const H_inv = invertMatrix(adjustedH);
+      const srcPoint = multiplyMatrices(H_inv, [[x], [y], [1]]);
+      
+      // Normalize tọa độ nguồn
+      const srcX = Math.round(srcPoint[0][0] / srcPoint[2][0]);
+      const srcY = Math.round(srcPoint[1][0] / srcPoint[2][0]);
+
+      // Copy pixel nếu nằm trong bounds
+      if (srcX >= 0 && srcX < width && srcY >= 0 && srcY < heightImg) {
+        const srcIdx = (srcY * width + srcX) * 4;
+        const dstIdx = (y * newWidth + x) * 4;
         outputData[dstIdx] = inputData[srcIdx];
         outputData[dstIdx + 1] = inputData[srcIdx + 1];
         outputData[dstIdx + 2] = inputData[srcIdx + 2];
@@ -594,5 +718,14 @@ function applyPerspectiveTransform(
     }
   }
 
-  return new ImageData(outputData, width, heightImg);
+  // 7. Tạo ImageData với kích thước mới
+  let result = new ImageData(outputData, newWidth, newHeight);
+
+  // 8. Crop hoặc resize để fit màn hình
+  const maxWidth = 1080;  // Có thể điều chỉnh
+  const maxHeight = 720;  // Có thể điều chỉnh
+  result = cropOrResize(result, maxWidth, maxHeight);
+
+  return result;
 }
+
