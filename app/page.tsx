@@ -9,7 +9,7 @@ export default function Page() {
   return (
     <Tabs defaultValue="roi" className="w-full h-screen flex flex-col">
       <TabsList className="grid w-full grid-cols-2">
-        <TabsTrigger value="roi">ROI Configuration</TabsTrigger>
+        {/* <TabsTrigger value="roi">ROI Configuration</TabsTrigger> */}
         <TabsTrigger value="perspective">Perspective Transform Configure</TabsTrigger>
       </TabsList>
       <TabsContent value="roi" className="flex-1 overflow-hidden">
