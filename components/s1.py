@@ -8,8 +8,9 @@ class BirdsEyeTransformer:
         """
         self.camera_height = camera_height
         self.pitch = pitch
-        self.yaw = yaw 
-        self.roll = roll
+        self.yaw = 34 
+        self.roll = 12
+	self.pitch = pitch
         self.focal_length = focal_length
         
     def compute_birdseye_homography(self, principal_point):
